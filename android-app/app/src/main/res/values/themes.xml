@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.Museo" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#0E2A47</item>
+        <item name="android:windowBackground">@color/background</item>
+    </style>
+</resources>
