@@ -21,6 +21,7 @@ data class UserEntity(
     val avatar: String = "avatar_1",  // "avatar_N" predefinido o ruta a foto tomada con la cámara
     val active: Boolean = true,
     // Preferencias (pantalla 15)
+    val notificationsEnabled: Boolean = true,
     val largeText: Boolean = false,
     val highContrast: Boolean = false,
     val language: String = "Español",
@@ -106,6 +107,28 @@ data class MuseumViewEntity(
     val userId: Long,
     val museumId: Long,
     val viewedAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * Notificaciones. targetRole = "ALL" o un Role.name; targetUserId != null → solo ese usuario.
+ * destination = ruta de navegación a abrir al tocarla.
+ */
+@Entity(tableName = "notifications")
+data class NotificationEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String,
+    val body: String,
+    val category: String,   // CURSO, MUSEO, PEDIDO, PUBLICACION, EVENTO
+    val targetRole: String = "ALL",
+    val targetUserId: Long? = null,
+    val destination: String = "",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "notification_reads", primaryKeys = ["userId", "notificationId"])
+data class NotificationReadEntity(
+    val userId: Long,
+    val notificationId: Long
 )
 
 /** Historial local de pedidos/solicitudes (fuente oficial: backend). */

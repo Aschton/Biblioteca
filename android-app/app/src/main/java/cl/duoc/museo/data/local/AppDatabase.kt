@@ -14,9 +14,11 @@ import androidx.room.RoomDatabase
         CartItemEntity::class,
         QrHistoryEntity::class,
         MuseumViewEntity::class,
+        NotificationEntity::class,
+        NotificationReadEntity::class,
         OrderEntity::class
     ],
-    version = 2,
+    version = 1,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,6 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
     abstract fun cartDao(): CartDao
     abstract fun historyDao(): HistoryDao
+    abstract fun notificationDao(): NotificationDao
     abstract fun orderDao(): OrderDao
 
     companion object {

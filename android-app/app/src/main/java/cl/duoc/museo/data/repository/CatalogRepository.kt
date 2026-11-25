@@ -6,7 +6,8 @@ import cl.duoc.museo.data.local.CartItemEntity
 import cl.duoc.museo.data.local.CartLine
 import cl.duoc.museo.data.local.FavoriteEntity
 import cl.duoc.museo.data.local.ProductEntity
-import cl.duoc.museo.data.remote.ApiService
+import cl.duoc.museo.data.remote.CatalogoApi
+import cl.duoc.museo.data.remote.ensureSuccess
 import cl.duoc.museo.data.remote.toDto
 import cl.duoc.museo.data.remote.toEntity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -19,7 +20,7 @@ data class Availability(val available: Boolean, val stock: Int, val checkedOnlin
 @OptIn(ExperimentalCoroutinesApi::class)
 class CatalogRepository(
     private val db: AppDatabase,
-    private val api: ApiService,
+    private val api: CatalogoApi,
     private val session: SessionManager
 ) {
     private val dao = db.productDao()
@@ -61,6 +62,15 @@ class CatalogRepository(
     suspend fun setActive(product: ProductEntity, active: Boolean): Boolean {
         if (!active) runCatching { api.deactivateProduct(product.id) }
         return save(product.copy(active = active), false)
+    }
+
+    /** Elimina el producto en ms-catalogo y en la caché. Requiere conexión. */
+    suspend fun delete(product: ProductEntity): Boolean = try {
+        api.deleteProduct(product.id).ensureSuccess()
+        dao.deleteById(product.id)
+        true
+    } catch (e: Exception) {
+        false
     }
 
     suspend fun decreaseStock(productId: Long, qty: Int) {

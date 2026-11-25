@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,24 +22,31 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Accessibility
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Interests
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.SwitchAccount
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -83,7 +91,7 @@ import cl.duoc.museo.ui.viewmodel.AdminUsersViewModel
 import cl.duoc.museo.ui.viewmodel.AppViewModelProvider
 import cl.duoc.museo.ui.viewmodel.ProfileViewModel
 
-private enum class ProfileDialog { DATA, INTERESTS, AVATAR, PASSWORD }
+private enum class ProfileDialog { DATA, INTERESTS, AVATAR, PASSWORD, LANGUAGE, HELP }
 
 private val interests = listOf("Arte colonial", "Arte moderno", "Arqueología", "Conservación", "Curaduría", "Museología digital")
 
@@ -137,6 +145,16 @@ fun ProfileScreen(onNavigate: (String) -> Unit) {
             if (role == Role.ADMIN) item { ProfileItem(Icons.Filled.Group, "Cuentas de demostración", "Crear, activar o eliminar perfiles ficticios") { onNavigate(Routes.ADMIN_USERS) } }
             item { ProfileItem(Icons.Filled.Lock, "Cambiar contraseña", null) { dialog = ProfileDialog.PASSWORD } }
 
+            item { Group("Preferencias") }
+            item {
+                SwitchItem(Icons.Filled.Notifications, "Notificaciones push", "Avisos de cursos, museos y pedidos", u.notificationsEnabled) { v ->
+                    vm.save({ it.copy(notificationsEnabled = v) }, if (v) "Notificaciones activadas" else "Notificaciones desactivadas")
+                }
+            }
+            item { SwitchItem(Icons.Filled.TextFields, "Texto grande", "Accesibilidad", u.largeText) { v -> vm.save({ it.copy(largeText = v) }) } }
+            item { SwitchItem(Icons.Filled.Contrast, "Alto contraste", "Accesibilidad", u.highContrast) { v -> vm.save({ it.copy(highContrast = v) }) } }
+            item { ProfileItem(Icons.Filled.Language, "Idioma", u.language) { dialog = ProfileDialog.LANGUAGE } }
+
             item { Group("Permisos") }
             item {
                 PermissionItem(Icons.Filled.PhotoCamera, "Cámara", has(Manifest.permission.CAMERA)) { requestPerm.launch(Manifest.permission.CAMERA) }
@@ -144,13 +162,18 @@ fun ProfileScreen(onNavigate: (String) -> Unit) {
             item {
                 PermissionItem(Icons.Filled.LocationOn, "Ubicación", has(Manifest.permission.ACCESS_FINE_LOCATION)) { requestPerm.launch(Manifest.permission.ACCESS_FINE_LOCATION) }
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) item {
+                PermissionItem(Icons.Filled.Notifications, "Notificaciones", has(Manifest.permission.POST_NOTIFICATIONS)) { requestPerm.launch(Manifest.permission.POST_NOTIFICATIONS) }
+            }
             item {
                 TextButton(onClick = {
                     context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
                 }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Abrir ajustes de la app") }
             }
 
-            item { Group("Sesión") }
+            item { Group("Soporte") }
+            item { ProfileItem(Icons.Filled.Accessibility, "Accesibilidad", "Texto grande y alto contraste arriba") {} }
+            item { ProfileItem(Icons.AutoMirrored.Filled.HelpOutline, "Ayuda y soporte", null) { dialog = ProfileDialog.HELP } }
             item {
                 ProfileItem(Icons.Filled.SwitchAccount, "Cambiar de usuario", "Los datos de cada perfil se mantienen separados") {
                     onNavigate(Routes.LOGIN); vm.logout()
@@ -241,6 +264,30 @@ fun ProfileScreen(onNavigate: (String) -> Unit) {
                 dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancelar") } }
             )
         }
+        ProfileDialog.LANGUAGE -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("Idioma") },
+            text = {
+                Column {
+                    listOf("Español", "English", "Português").forEach { lang ->
+                        Text(lang, Modifier.fillMaxWidth().clickable { vm.save({ it.copy(language = lang) }, "Idioma: $lang"); dialog = null }.padding(12.dp),
+                            color = if (lang == u.language) Navy else MaterialTheme.colorScheme.onSurface)
+                    }
+                    Text("En el MVP la interfaz está en español; la preferencia queda guardada en SQLite.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Cerrar") } }
+        )
+        ProfileDialog.HELP -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("Ayuda y soporte") },
+            text = {
+                Text("Museo de los Museos · MVP académico.\n\nTodos los datos, precios, cuentas y envíos son ficticios. " +
+                    "Para soporte escribe a soporte@museo-demo.cl (correo ficticio).")
+            },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Cerrar") } }
+        )
         null -> {}
     }
 }
@@ -261,6 +308,19 @@ private fun ProfileItem(icon: ImageVector, title: String, subtitle: String?, onC
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SwitchItem(icon: ImageVector, title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = Navy)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 

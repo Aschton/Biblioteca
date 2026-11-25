@@ -79,6 +79,9 @@ interface ProductDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(products: List<ProductEntity>)
+
+    @Query("DELETE FROM products WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
 
 @Dao
@@ -151,6 +154,45 @@ interface HistoryDao {
             "WHERE v.userId = :userId ORDER BY v.viewedAt DESC"
     )
     fun observeViewedMuseums(userId: Long): Flow<List<MuseumEntity>>
+}
+
+data class NotificationItem(
+    @Embedded val notification: NotificationEntity,
+    val isRead: Boolean
+)
+
+@Dao
+interface NotificationDao {
+    @Query(
+        "SELECT n.*, EXISTS(SELECT 1 FROM notification_reads r WHERE r.notificationId = n.id AND r.userId = :userId) AS isRead " +
+            "FROM notifications n WHERE n.targetUserId = :userId " +
+            "OR (n.targetUserId IS NULL AND (n.targetRole = 'ALL' OR n.targetRole = :role)) " +
+            "ORDER BY n.createdAt DESC"
+    )
+    fun observeFor(userId: Long, role: String): Flow<List<NotificationItem>>
+
+    @Query(
+        "SELECT COUNT(*) FROM notifications n WHERE (n.targetUserId = :userId " +
+            "OR (n.targetUserId IS NULL AND (n.targetRole = 'ALL' OR n.targetRole = :role))) " +
+            "AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.notificationId = n.id AND r.userId = :userId)"
+    )
+    fun observeUnread(userId: Long, role: String): Flow<Int>
+
+    @Insert
+    suspend fun insert(n: NotificationEntity): Long
+
+    @Query("SELECT COUNT(*) > 0 FROM notifications WHERE title = :title AND createdAt = :createdAt")
+    suspend fun exists(title: String, createdAt: Long): Boolean
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun markRead(read: NotificationReadEntity)
+
+    @Query(
+        "INSERT OR IGNORE INTO notification_reads (userId, notificationId) " +
+            "SELECT :userId, n.id FROM notifications n WHERE n.targetUserId = :userId " +
+            "OR (n.targetUserId IS NULL AND (n.targetRole = 'ALL' OR n.targetRole = :role))"
+    )
+    suspend fun markAllRead(userId: Long, role: String)
 }
 
 @Dao

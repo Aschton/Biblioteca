@@ -5,7 +5,8 @@ import cl.duoc.museo.data.local.AppDatabase
 import cl.duoc.museo.data.local.FavoriteEntity
 import cl.duoc.museo.data.local.MuseumEntity
 import cl.duoc.museo.data.local.MuseumViewEntity
-import cl.duoc.museo.data.remote.ApiService
+import cl.duoc.museo.data.remote.MuseosApi
+import cl.duoc.museo.data.remote.ensureSuccess
 import cl.duoc.museo.data.remote.toDto
 import cl.duoc.museo.data.remote.toEntity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,7 +21,7 @@ import kotlinx.coroutines.flow.flowOf
 @OptIn(ExperimentalCoroutinesApi::class)
 class MuseumRepository(
     private val db: AppDatabase,
-    private val api: ApiService,
+    private val api: MuseosApi,
     private val session: SessionManager
 ) {
     private val dao = db.museumDao()
@@ -65,6 +66,21 @@ class MuseumRepository(
     }
 
     suspend fun setPublished(museum: MuseumEntity, published: Boolean): Boolean = save(museum.copy(published = published), false)
+
+    /**
+     * Elimina la ficha en ms-museos y en la caché. Si la ficha nunca llegó al backend (pendingSync)
+     * se borra solo localmente. @return true si se eliminó.
+     */
+    suspend fun delete(museum: MuseumEntity): Boolean {
+        if (museum.pendingSync) { dao.deleteById(museum.id); return true }
+        return try {
+            api.deleteMuseum(museum.id).ensureSuccess()
+            dao.deleteById(museum.id)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     // ----- Favoritos y consultados (por usuario) -----
 

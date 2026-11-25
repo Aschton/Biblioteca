@@ -18,7 +18,7 @@ class MuseoApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
-        // TODO (pendiente): crear el canal de notificaciones push.
+        container.notificationHelper.createChannel()
 
         // osmdroid exige un user agent propio para descargar teselas de OpenStreetMap
         Configuration.getInstance().apply {

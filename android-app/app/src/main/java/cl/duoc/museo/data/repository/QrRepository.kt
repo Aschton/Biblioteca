@@ -3,7 +3,8 @@ package cl.duoc.museo.data.repository
 import cl.duoc.museo.data.SessionManager
 import cl.duoc.museo.data.local.AppDatabase
 import cl.duoc.museo.data.local.QrHistoryEntity
-import cl.duoc.museo.data.remote.ApiService
+import cl.duoc.museo.data.remote.CatalogoApi
+import cl.duoc.museo.data.remote.MuseosApi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -24,12 +25,13 @@ data class QrResult(
 
 /**
  * Formato de los códigos: "MUSEO:<id>" o "PROD:<id>".
- * Se valida localmente (caché SQLite) y, si no se encuentra, se consulta al backend.
+ * Se valida localmente (caché SQLite) y, si no se encuentra, se consulta al microservicio que corresponda.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class QrRepository(
     private val db: AppDatabase,
-    private val api: ApiService,
+    private val museosApi: MuseosApi,
+    private val catalogoApi: CatalogoApi,
     private val session: SessionManager
 ) {
     fun observeHistory(): Flow<List<QrHistoryEntity>> = session.userId.flatMapLatest { id ->
@@ -55,7 +57,8 @@ class QrRepository(
         }
 
         val result = local ?: runCatching {
-            val r = api.resolveQr(code)
+            // Cada microservicio resuelve sus propios códigos
+            val r = if (code.startsWith("MUSEO:")) museosApi.resolveQr(code) else catalogoApi.resolveQr(code)
             QrResult(r.code, r.type, r.id, r.title, r.description, if (r.type == "MUSEUM") "Museo virtual" else "Producto")
         }.getOrNull()
         ?: return Result.failure(IllegalArgumentException("Código desconocido: $code"))

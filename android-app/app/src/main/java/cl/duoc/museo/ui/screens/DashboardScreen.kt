@@ -40,6 +40,8 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -97,6 +99,7 @@ fun DashboardScreen(user: UserEntity?, onNavigate: (String) -> Unit, onTab: (Str
         viewModelStoreOwner = LocalContext.current as ComponentActivity, factory = AppViewModelProvider.Factory
     )
     val state by vm.state.collectAsStateWithLifecycle()
+    val unread by sessionVm.unread.collectAsStateWithLifecycle()
     val cart by sessionVm.cartCount.collectAsStateWithLifecycle()
     val role = user?.roleEnum ?: Role.CLIENTE
 
@@ -152,8 +155,9 @@ fun DashboardScreen(user: UserEntity?, onNavigate: (String) -> Unit, onTab: (Str
                         Tag(role.label, container = Gold, content = Color.White)
                     }
                     IconButton(onClick = { onTab(Routes.NOTIFICATIONS) }) {
-                        // TODO (pendiente): mostrar contador de notificaciones no leídas
-                        Icon(Icons.Filled.Notifications, "Notificaciones", tint = Color.White)
+                        BadgedBox(badge = { if (unread > 0) Badge { Text("$unread") } }) {
+                            Icon(Icons.Filled.Notifications, "Notificaciones", tint = Color.White)
+                        }
                     }
                     Box(Modifier.clickable { onTab(Routes.PROFILE) }) {
                         Avatar(user?.avatar ?: "avatar_1", size = 52.dp, name = user?.name ?: "")

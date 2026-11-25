@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -100,6 +101,7 @@ import cl.duoc.museo.ui.components.OfflineBanner
 import cl.duoc.museo.ui.components.Rating
 import cl.duoc.museo.ui.components.ReferenceImage
 import cl.duoc.museo.ui.components.Tag
+import cl.duoc.museo.ui.components.WeatherCard
 import cl.duoc.museo.ui.components.rememberCameraCapture
 import cl.duoc.museo.ui.components.toast
 import cl.duoc.museo.ui.theme.Danger
@@ -288,10 +290,30 @@ fun MuseumDetailScreen(role: Role?, onBack: () -> Unit, onEdit: (Long) -> Unit) 
     val museum by vm.museum.collectAsStateWithLifecycle()
     val favorite by vm.isFavorite.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
+    val weather by vm.weather.collectAsStateWithLifecycle()
+    val deleted by vm.deleted.collectAsStateWithLifecycle()
+    var confirmDelete by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); vm.clearMessage() } }
+    LaunchedEffect(deleted) { if (deleted) { toast(context, "Ficha eliminada"); onBack() } }
+
+    if (confirmDelete) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("¿Eliminar esta ficha?") },
+            text = { Text("Se borrará del microservicio de museos y ya no aparecerá en el mapa. Esta acción no se puede deshacer.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmDelete = false; vm.delete() }) {
+                    Text("Eliminar", color = Danger)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmDelete = false }) { Text("Cancelar") }
+            }
+        )
+    }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0)) { padding ->
         val m = museum
@@ -338,6 +360,10 @@ fun MuseumDetailScreen(role: Role?, onBack: () -> Unit, onEdit: (Long) -> Unit) 
                     "${m.city}, ${m.country}\nLat ${"%.4f".format(Locale.US, m.latitude)} · Lng ${"%.4f".format(Locale.US, m.longitude)}")
                 InfoBlock(Icons.Filled.Public, "Visita virtual", m.virtualTourUrl)
 
+                // API externa: clima en la ubicación del museo (Open-Meteo)
+                Spacer(Modifier.height(8.dp))
+                WeatherCard(weather, m.city, onRetry = { vm.retryWeather() })
+
                 Spacer(Modifier.height(16.dp))
                 Button(
                     onClick = {
@@ -374,6 +400,12 @@ fun MuseumDetailScreen(role: Role?, onBack: () -> Unit, onEdit: (Long) -> Unit) 
                             }
                             Switch(checked = m.published, onCheckedChange = { vm.setPublished(it) })
                         }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                        Icon(Icons.Filled.Delete, null, tint = Danger)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Eliminar ficha", color = Danger)
                     }
                 }
 

@@ -6,7 +6,8 @@ import cl.duoc.museo.data.local.CartLine
 import cl.duoc.museo.data.local.OrderEntity
 import cl.duoc.museo.data.local.ProductEntity
 import cl.duoc.museo.data.local.Role
-import cl.duoc.museo.data.remote.ApiService
+import cl.duoc.museo.data.remote.PedidosApi
+import cl.duoc.museo.data.remote.ensureSuccess
 import cl.duoc.museo.data.remote.OrderDto
 import cl.duoc.museo.data.remote.OrderItemRequest
 import cl.duoc.museo.data.remote.OrderRequest
@@ -15,7 +16,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import java.util.Calendar
 
 object OrderStatus {
     const val PENDIENTE = "PENDIENTE"
@@ -33,9 +33,10 @@ object OrderStatus {
 @OptIn(ExperimentalCoroutinesApi::class)
 class OrderRepository(
     private val db: AppDatabase,
-    private val api: ApiService,
+    private val api: PedidosApi,
     private val session: SessionManager,
-    private val catalog: CatalogRepository
+    private val catalog: CatalogRepository,
+    private val notifications: NotificationRepository
 ) {
     private val dao = db.orderDao()
 
@@ -70,16 +71,23 @@ class OrderRepository(
         val request = OrderRequest(
             user.email, user.name, lines.map { OrderItemRequest(it.product.id, it.quantity) }, country, shippingType
         )
+        // Sin servidor no se compra: el pedido solo existe si ms-pedidos lo guardó en MySQL
         val order = try {
             api.createOrder(request).toEntity().copy(itemsSummary = summary)
         } catch (e: Exception) {
-            localOrder(user.id, user.email, user.name, summary, lines.sumOf { it.quantity },
-                subtotal, shipping, country, shippingType, "COMPRA")
+            throw IllegalStateException(NO_SERVER, e)
         }
         dao.upsert(order)
         lines.forEach { catalog.decreaseStock(it.product.id, it.quantity) }
         catalog.clearCart()
-        // TODO (pendiente): notificaciones push: avisar al cliente y al Administrador del nuevo pedido.
+        notifications.publish(
+            "Pedido ${order.code} recibido", "Total ${"%.0f".format(order.total)} USD. Estado: Pendiente",
+            "PEDIDO", targetUserId = user.id, destination = "orders"
+        )
+        notifications.publish(
+            "Nueva solicitud ${order.code}", "${user.name} · $summary",
+            "PEDIDO", targetRole = Role.ADMIN.name, destination = "orders"
+        )
         return order
     }
 
@@ -90,14 +98,15 @@ class OrderRepository(
             api.createOrder(OrderRequest(user.email, user.name, listOf(OrderItemRequest(product.id, 1)), "Chile", "DIGITAL", "INFO_CURSO"))
                 .toEntity().copy(itemsSummary = "Info: ${product.name}", subtotal = 0.0, total = 0.0)
         } catch (e: Exception) {
-            localOrder(user.id, user.email, user.name, "Info: ${product.name}", 1, 0.0, 0.0, "Chile", "DIGITAL", "INFO_CURSO")
+            throw IllegalStateException(NO_SERVER, e)
         }
         dao.upsert(order)
-        // TODO (pendiente): notificaciones push: avisar al Administrador de la solicitud de información.
+        notifications.publish("Solicitud de información", "${user.name} pidió información de ${product.name}",
+            "CURSO", targetRole = Role.ADMIN.name, destination = "orders")
         return order
     }
 
-    /** El Administrador cambia el estado del pedido. */
+    /** El Administrador cambia el estado; el cliente recibe una notificación. */
     suspend fun updateStatus(order: OrderEntity, status: String) {
         val updated = try {
             if (order.synced) api.updateStatus(order.id, StatusUpdate(status)).toEntity()
@@ -107,21 +116,22 @@ class OrderRepository(
             order.copy(status = status)
         }
         dao.upsert(updated)
-        // TODO (pendiente): notificaciones push: avisar al cliente del cambio de estado.
+        notifications.publish(
+            "Estado de tu pedido", "Tu pedido ${order.code} ahora está: ${OrderStatus.label(status)}",
+            "PEDIDO", targetUserId = order.userId, destination = "orders"
+        )
     }
 
-    private fun localOrder(
-        userId: Long, email: String, name: String, summary: String, count: Int,
-        subtotal: Double, shipping: Double, country: String, type: String, kind: String
-    ): OrderEntity {
-        val id = System.currentTimeMillis() % 1_000_000_000L + 100_000L
-        val year = Calendar.getInstance().get(Calendar.YEAR)
-        return OrderEntity(
-            id = id, code = "#$year-L${id % 100000}", userId = userId, userEmail = email, userName = name,
-            createdAt = System.currentTimeMillis(), itemsSummary = summary, itemsCount = count,
-            subtotal = subtotal, shipping = shipping, total = subtotal + shipping,
-            status = OrderStatus.PENDIENTE, country = country, shippingType = type, kind = kind, synced = false
-        )
+    /** El Administrador elimina una solicitud. Las no sincronizadas se borran solo localmente. */
+    suspend fun delete(order: OrderEntity): Boolean {
+        if (!order.synced) { dao.deleteById(order.id); return true }
+        return try {
+            api.deleteOrder(order.id).ensureSuccess()
+            dao.deleteById(order.id)
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private suspend fun OrderDto.toEntity(): OrderEntity {
@@ -132,5 +142,9 @@ class OrderRepository(
             itemsCount = items.sumOf { it.quantity }, subtotal = subtotal, shipping = shipping, total = total,
             status = status, country = country, shippingType = shippingType, kind = kind ?: "COMPRA", synced = true
         )
+    }
+
+    companion object {
+        const val NO_SERVER = "No se pudo conectar con el servidor. La solicitud no se realizó; intenta de nuevo."
     }
 }

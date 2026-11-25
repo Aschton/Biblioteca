@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.flowOf
 
 /**
  * Guarda qué usuario está activo en el teléfono. Todos los datos personales
- * (favoritos, carrito, historial) se filtran por este id,
+ * (favoritos, carrito, historial, notificaciones leídas) se filtran por este id,
  * así al cambiar de perfil no se mezcla la información.
  */
 class SessionManager(context: Context, private val userDao: UserDao) {

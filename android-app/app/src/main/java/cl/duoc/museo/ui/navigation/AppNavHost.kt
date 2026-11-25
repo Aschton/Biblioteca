@@ -1,6 +1,10 @@
 package cl.duoc.museo.ui.navigation
 
+import android.Manifest
 import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.WindowInsets
@@ -12,6 +16,8 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -107,16 +113,22 @@ fun NavHostController.navigateTab(route: String) {
 }
 
 @Composable
-fun AppNavHost() {
+fun AppNavHost(pendingDestination: String?, onDestinationHandled: () -> Unit) {
     val nav = rememberNavController()
     val sessionVm: SessionViewModel = viewModel(factory = AppViewModelProvider.Factory)
     val userState by sessionVm.userState.collectAsStateWithLifecycle()
+    val unread by sessionVm.unread.collectAsStateWithLifecycle()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val user = userState.user
     val role = user?.roleEnum
 
-    // TODO (pendiente): pedir el permiso POST_NOTIFICATIONS (Android 13+) al iniciar sesión.
+    // Permiso de notificaciones (Android 13+)
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(user?.id) {
+        if (user != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     // Si se cierra sesión desde cualquier pantalla, volver a la bienvenida
     LaunchedEffect(userState) {
@@ -124,6 +136,14 @@ fun AppNavHost() {
             currentRoute !in listOf(Routes.WELCOME, Routes.LOGIN, Routes.REGISTER)
         ) {
             nav.navigate(Routes.WELCOME) { popUpTo(0) { inclusive = true } }
+        }
+    }
+
+    // Abrir la pantalla indicada por una notificación push
+    LaunchedEffect(pendingDestination, user?.id, currentRoute) {
+        if (pendingDestination != null && user != null && currentRoute != null) {
+            nav.navigate(pendingDestination) { launchSingleTop = true }
+            onDestinationHandled()
         }
     }
 
@@ -140,7 +160,13 @@ fun AppNavHost() {
                     NavigationBarItem(
                         selected = currentRoute == item.route,
                         onClick = { nav.navigateTab(item.route) },
-                        icon = { Icon(item.icon, item.label) },
+                        icon = {
+                            if (item.route == Routes.NOTIFICATIONS && unread > 0) {
+                                BadgedBox(badge = { Badge { Text(if (unread > 9) "9+" else "$unread") } }) {
+                                    Icon(item.icon, item.label)
+                                }
+                            } else Icon(item.icon, item.label)
+                        },
                         label = { Text(item.label) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Navy, selectedTextColor = Navy, indicatorColor = GoldLight
@@ -223,7 +249,9 @@ fun AppNavHost() {
             }
             composable(Routes.ORDERS) { OrdersScreen(onBack = back) }
             composable(Routes.NOTIFICATIONS) {
-                NotificationsScreen(role = role)
+                NotificationsScreen(role = role, onOpen = { route ->
+                    if (route.isNotBlank()) nav.navigate(route) { launchSingleTop = true }
+                })
             }
             composable(Routes.PROFILE) {
                 ProfileScreen(onNavigate = { nav.navigate(it) })

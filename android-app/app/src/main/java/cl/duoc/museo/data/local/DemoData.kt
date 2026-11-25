@@ -88,10 +88,24 @@ object DemoData {
             shippingAddress = "Av. Ficticia 123, Santiago")
     )
 
+    val notifications = listOf(
+        NotificationEntity(title = "Nuevo curso disponible", body = "Curso de Museología Digital",
+            category = "CURSO", targetRole = "ALL", destination = "product/5"),
+        NotificationEntity(title = "Nuevo museo virtual", body = "Centro de Arte Contemporáneo de Quito",
+            category = "MUSEO", targetRole = "ALL", destination = "museum/10"),
+        NotificationEntity(title = "Nueva publicación", body = "El Arte Colonial en Iberoamérica",
+            category = "PUBLICACION", targetRole = "ALL", destination = "product/6"),
+        NotificationEntity(title = "Evento próximo", body = "Charla en vivo: Museos y Comunidades",
+            category = "EVENTO", targetRole = "ALL", destination = "catalog"),
+        NotificationEntity(title = "Ficha pendiente de revisión", body = "Revisa los museos con publicación pendiente",
+            category = "MUSEO", targetRole = Role.INVESTIGADOR.name, destination = "map")
+    )
+
     suspend fun seedIfEmpty(db: AppDatabase) {
         if (db.userDao().findByEmail("admin@museo.cl") != null) return
         users.forEach { db.userDao().insert(it) }
         db.museumDao().upsertAll(museums)
         db.productDao().upsertAll(products)
+        notifications.forEach { db.notificationDao().insert(it) }
     }
 }

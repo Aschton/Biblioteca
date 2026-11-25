@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -341,12 +342,29 @@ fun ProductFormScreen(onBack: () -> Unit) {
     val f by vm.form.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val takePhoto = rememberCameraCapture { path -> vm.update { it.copy(imageUrl = path) } }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     LaunchedEffect(f.saved) {
         if (f.saved) {
             toast(context, if (f.savedOnline) "Guardado en el servidor" else "Guardado localmente (sin conexión)")
             onBack()
         }
+    }
+    LaunchedEffect(f.deleted) { if (f.deleted) { toast(context, "Producto eliminado"); onBack() } }
+    LaunchedEffect(f.error) { f.error?.let { toast(context, it); vm.clearError() } }
+
+    if (confirmDelete) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("¿Eliminar producto?") },
+            text = { Text("Se borrará del microservicio de catálogo. Si solo quieres ocultarlo, usa \"Desactivar\".") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmDelete = false; vm.delete() }) { Text("Eliminar", color = Danger) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmDelete = false }) { Text("Cancelar") }
+            }
+        )
     }
 
     Scaffold(topBar = { MuseoTopBar(if (vm.isNew) "Nuevo producto o curso" else "Modificar producto", onBack = onBack) }) { padding ->
@@ -381,6 +399,10 @@ fun ProductFormScreen(onBack: () -> Unit) {
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(onClick = { vm.deactivate() }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
                     Icon(Icons.Filled.Block, null, tint = Danger); Spacer(Modifier.width(8.dp)); Text("Desactivar producto", color = Danger)
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(onClick = { confirmDelete = true }, enabled = !f.saving, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                    Icon(Icons.Filled.Delete, null, tint = Danger); Spacer(Modifier.width(8.dp)); Text("Eliminar producto", color = Danger)
                 }
             }
             Spacer(Modifier.height(24.dp))
